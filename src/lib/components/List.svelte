@@ -17,6 +17,10 @@
 			el.setAttribute("data-selected-items-count", Object.keys($selectedItems).length + 1);
 		}
   }
+
+  function handleClick(e) {
+	console.log(e);
+  }
 	function handleConsider(e) {
 		const {items: newItems, info: {trigger, source, id}} = e.detail;
 		if (source !== SOURCES.KEYBOARD) {
@@ -35,25 +39,55 @@
 		if (trigger === TRIGGERS.DRAG_STOPPED) $selectedItems = {};
 		items = newItems;
 	}
+	/**
+	 * Handles finalizing a drag and drop operation by updating the items list.
+	 * Checks the drag trigger and handles multi-select drops differently:
+	 * - DROPPED_INTO_ANOTHER: filter out selected items
+	 * - DROPPED_INTO_ZONE/DROPPED_OUTSIDE_OF_ANY: insert selected items before drop target
+	 * - KEYBOARD: clear selected items
+	 * Also updates the active zone on drop.
+	 */
 	function handleFinalize(e) {
-		let {items: newItems, info: {trigger, source, id}} = e.detail;	
+		let {
+			items: newItems,
+			info: { trigger, source, id },
+		} = e.detail;
 		if (Object.keys($selectedItems).length) {
 			if (trigger === TRIGGERS.DROPPED_INTO_ANOTHER) {
-				items = newItems.filter(item => !Object.keys($selectedItems).includes(item.id));
-			} else if (trigger === TRIGGERS.DROPPED_INTO_ZONE || trigger === TRIGGERS.DROPPED_OUTSIDE_OF_ANY) {
+				items = newItems.filter(
+					(item) => !Object.keys($selectedItems).includes(item.id),
+				);
+			} else if (
+				trigger === TRIGGERS.DROPPED_INTO_ZONE ||
+				trigger === TRIGGERS.DROPPED_OUTSIDE_OF_ANY
+			) {
 				tick().then(() => {
-					const idx = newItems.findIndex(item => item.id === id);
+					const idx = newItems.findIndex((item) => item.id === id);
 					// to support arrow up when keyboard dragging
-					const sidx = Math.max(Object.values($selectedItems).findIndex(item => item.id === id), 0);
-					newItems = newItems.filter(item => !Object.keys($selectedItems).includes(item.id)) 
-					newItems.splice(idx - sidx, 0, ...Object.values($selectedItems));
+					const sidx = Math.max(
+						Object.values($selectedItems).findIndex(
+							(item) => item.id === id,
+						),
+						0,
+					);
+					newItems = newItems.filter(
+						(item) =>
+							!Object.keys($selectedItems).includes(item.id),
+					);
+					newItems.splice(
+						idx - sidx,
+						0,
+						...Object.values($selectedItems),
+					);
 					items = newItems;
 					$activeZoneId = zoneId;
-					if (source !== SOURCES.KEYBOARD) $selectedItems = {}; 
+					if (source !== SOURCES.KEYBOARD) $selectedItems = {};
 				});
+			} else if (source === SOURCES.POINTER) {
+				
 			}
 		} else {
-			items = newItems;	
+			items = newItems;
 		}
 	}
 	function handleMaybeSelect(id, e) {

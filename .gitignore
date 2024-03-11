@@ -6,6 +6,8 @@ node_modules
 .env
 .env.*
 !.env.example
-/python/backend/models
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+python/backend/storage
+python/backend/models
+**/__pycache__/

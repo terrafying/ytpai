@@ -1,43 +1,47 @@
-import falcon
+import json
 import os
 import mimetypes
-from wsgiref.simple_server import make_server
+import falcon
 from falcon_multipart.middleware import MultipartMiddleware
-import json
 from moviepy.editor import *
 from AudioAnalyzer import AudioAnalyzer
 
-storagePath = "storage/"
+STORAGE_PATH = "storage/"
 smallModelPath = "models/vosk-model-small-en-us-0.15"
-bigModelPath = "models/vosk-model-en-us-0.22"
+BIG_MODEL_PATH = "models/vosk-model-en-us-0.22"
+
 esModelPath = "models/vosk-model-small-es-0.42"
 frModelPath = "models/vosk-model-small-fr-0.22"
 ruModelPath = "models/vosk-model-small-ru-0.22"
 deModelPath = "models/vosk-model-small-de-0.15"
 
-# Falcon resource for receiving audio/video and processing into json list of words
-# sessionKey - Unix timestamp from client. Used to name folder for files
-# isVideo - boolean string
-# Response - json list of words
+
 class Source(object):
+    """
+    Falcon resource for receiving audio/video and processing into json list of words
+
+    Args:
+        sessionKey - Unix timestamp from client. Used to name folder for files
+        isVideo - boolean string
+        Response - json list of words
+        
+    """
     def on_put(self, req, resp):
         sessionKey = req.get_param("key")
 
-        isVideo = req.get_param("isVideo")
-        isVideo = True if isVideo == "true" else False
+        isVideo = (req.get_param("isVideo") == "true")
 
-        useBigModel = req.get_param("useBigModel")
-        useBigModel = True if useBigModel == "true" else False
+        useBigModel = (req.get_param("useBigModel") == "true")
 
         fileObj = req.get_param("file")
         raw = fileObj.file.read()
 
         lang = req.get_param("lang")
 
-        path = storagePath + sessionKey
+        path = STORAGE_PATH + sessionKey
         wordsJson = ""
-        if not os.path.exists(path):
-            os.makedirs(path)
+        
+        os.makedirs(path, exist_ok=True)
 
         if isVideo:
             # save video
@@ -47,15 +51,16 @@ class Source(object):
             fullClip.audio.write_audiofile(
                 (path + "/audio.wav"), ffmpeg_params=["-ac", "1"], codec="pcm_s16le"
             )
-            wordsJson = processAudio(sessionKey, useBigModel, lang)
         else:
             # save audio
             with open((path + "/audio.wav"), "wb") as f:
                 f.write(raw)
-            wordsJson = processAudio(sessionKey, useBigModel, lang)
+            
+        wordsJson = processAudio(sessionKey, useBigModel, lang)
 
         resp.text = json.dumps({"wordsJson": wordsJson})
         resp.status = falcon.HTTP_200
+
 
 
 # Falcon resource for generating audio/video output
@@ -75,11 +80,11 @@ class Generate(object):
 
         path = ""
         if isVideo and not audioOnly:
-            path = storagePath + str(sessionKey) + "/concat.mp4"
-            generateVideo(sessionKey, chosenWords)
+            path = STORAGE_PATH + str(sessionKey) + "/concat.mp4"
+            generate_video(sessionKey, chosenWords)
         else:
-            path = storagePath + str(sessionKey) + "/concat.wav"
-            generateAudio(sessionKey, chosenWords)
+            path = STORAGE_PATH + str(sessionKey) + "/concat.wav"
+            generate_audio(sessionKey, chosenWords)
 
         generatedFile = open(path, "rb")
         content_length = os.path.getsize(path)
@@ -92,11 +97,11 @@ class Generate(object):
 
 # Takes audio file and returns json list of word objects
 def processAudio(sessionKey, useBigModel, lang):
-    audioFile = storagePath + str(sessionKey) + "/audio.wav"
+    audioFile = STORAGE_PATH + str(sessionKey) + "/audio.wav"
 
     modelPath = ""
     if lang == "en":
-        modelPath = bigModelPath if useBigModel else smallModelPath
+        modelPath = BIG_MODEL_PATH if useBigModel else smallModelPath
     elif lang == "es":
         modelPath = esModelPath
     elif lang == "fr":
@@ -111,25 +116,21 @@ def processAudio(sessionKey, useBigModel, lang):
     return audioAnalyzer.getWordsJson()
 
 
-# Takes json word objects and appends sublcips into video
-def generateVideo(sessionKey, wordsJson):
+def generate_video(sessionKey, wordsJson):
+    """ Takes json word objects and appends sublcips into video """
     words = json.loads(wordsJson)
-    subclips = []
-    fullVideoClip = VideoFileClip(storagePath + str(sessionKey) + "/video.mp4")
+    _clip = VideoFileClip(STORAGE_PATH + str(sessionKey) + "/video.mp4")
 
-    for i in range(len(words)):
-        subclips.append(
-            fullVideoClip.subclip(float(words[i]["id"]), float(words[i]["end"]))
-        )
+    subclips = [_clip.subclip(float(word["id"]), float(word["end"])) for word in words]
     concatClip = concatenate_videoclips(subclips)
-    concatClip.write_videofile(storagePath + str(sessionKey) + "/concat.mp4")
+    concatClip.write_videofile(STORAGE_PATH + str(sessionKey) + "/concat.mp4")
 
 
-# Takes json word objects and appends sublcips into audio
-def generateAudio(sessionKey, wordsJson):
+def generate_audio(sessionKey, wordsJson):
+    """ Takes json word objects and appends sublcips into audio """
     words = json.loads(wordsJson)
     subclips = []
-    fullAudioClip = AudioFileClip(storagePath + str(sessionKey) + "/audio.wav")
+    fullAudioClip = AudioFileClip(STORAGE_PATH + str(sessionKey) + "/audio.wav")
 
     for i in range(len(words)):
         subclips.append(
@@ -138,7 +139,7 @@ def generateAudio(sessionKey, wordsJson):
 
     concatClip = concatenate_audioclips(subclips)
     concatClip.write_audiofile(
-        storagePath + str(sessionKey) + "/concat.wav", codec="pcm_s16le"
+        STORAGE_PATH + str(sessionKey) + "/concat.wav", codec="pcm_s16le"
     )
 
 
